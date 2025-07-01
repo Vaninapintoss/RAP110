@@ -1,13 +1,96 @@
-CLASS LHC_TRAVEL DEFINITION INHERITING FROM CL_ABAP_BEHAVIOR_HANDLER.
-  PRIVATE SECTION.
-    METHODS:
-      GET_GLOBAL_AUTHORIZATIONS FOR GLOBAL AUTHORIZATION
-        IMPORTING
-           REQUEST requested_authorizations FOR Travel
-        RESULT result.
+CLASS lsc_zrap110_r_traveltp_075 DEFINITION INHERITING FROM cl_abap_behavior_saver.
+
+  PROTECTED SECTION.
+
+    METHODS adjust_numbers REDEFINITION.
+
 ENDCLASS.
 
-CLASS LHC_TRAVEL IMPLEMENTATION.
-  METHOD GET_GLOBAL_AUTHORIZATIONS.
+CLASS lsc_zrap110_r_traveltp_075 IMPLEMENTATION.
+
+  METHOD adjust_numbers.
   ENDMETHOD.
+
+ENDCLASS.
+
+CLASS lhc_travel DEFINITION INHERITING FROM cl_abap_behavior_handler.
+  PRIVATE SECTION.
+
+    CONSTANTS:
+      "travel status
+      BEGIN OF travel_status,
+        open     TYPE c LENGTH 1 VALUE 'O', "Open
+        accepted TYPE c LENGTH 1 VALUE 'A', "Accepted
+        rejected TYPE c LENGTH 1 VALUE 'X', "Rejected
+      END OF travel_status.
+
+    METHODS:
+      get_global_authorizations FOR GLOBAL AUTHORIZATION
+        IMPORTING
+        REQUEST requested_authorizations FOR Travel
+        RESULT result,
+      get_instance_features FOR INSTANCE FEATURES
+        IMPORTING keys REQUEST requested_features FOR Travel RESULT result.
+
+    METHODS acceptTravel FOR MODIFY
+      IMPORTING keys FOR ACTION Travel~acceptTravel RESULT result.
+
+    METHODS createTravel FOR MODIFY
+      IMPORTING keys FOR ACTION Travel~createTravel.
+
+    METHODS recalcTotalPrice FOR MODIFY
+      IMPORTING keys FOR ACTION Travel~recalcTotalPrice.
+
+    METHODS rejectTravel FOR MODIFY
+      IMPORTING keys FOR ACTION Travel~rejectTravel RESULT result.
+
+    METHODS calculateTotalPrice FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR Travel~calculateTotalPrice.
+
+    METHODS setInitialTravelValues FOR DETERMINE ON MODIFY
+      IMPORTING keys FOR Travel~setInitialTravelValues.
+
+    METHODS validateAgency FOR VALIDATE ON SAVE
+      IMPORTING keys FOR Travel~validateAgency.
+
+    METHODS validateCustomer FOR VALIDATE ON SAVE
+      IMPORTING keys FOR Travel~validateCustomer.
+
+    METHODS validateDates FOR VALIDATE ON SAVE
+      IMPORTING keys FOR Travel~validateDates.
+ENDCLASS.
+
+CLASS lhc_travel IMPLEMENTATION.
+  METHOD get_global_authorizations.
+  ENDMETHOD.
+  METHOD get_instance_features.
+  ENDMETHOD.
+
+  METHOD acceptTravel.
+  ENDMETHOD.
+
+  METHOD createTravel.
+  ENDMETHOD.
+
+  METHOD recalcTotalPrice.
+  ENDMETHOD.
+
+  METHOD rejectTravel.
+  ENDMETHOD.
+
+  METHOD calculateTotalPrice.
+  ENDMETHOD.
+
+  METHOD setInitialTravelValues.
+  ENDMETHOD.
+
+  METHOD validateAgency.
+  ENDMETHOD.
+
+  METHOD validateCustomer.
+  ENDMETHOD.
+
+  METHOD validateDates.
+  ENDMETHOD.
+
 ENDCLASS.
