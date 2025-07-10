@@ -22,7 +22,7 @@ CLASS lsc_zrap110_r_traveltp_075 IMPLEMENTATION.
           cl_numberrange_runtime=>number_get(
             EXPORTING
               nr_range_nr       = '01'
-              object            = 'ZRAP110075'  "Fallback: '/DMO/TRV_M'
+              object            = '/DMO/TRV_M'   "'ZRAP110###'
               quantity          = CONV #( lines( mapped-travel ) )
             IMPORTING
               number            = DATA(number_range_key)
@@ -129,16 +129,157 @@ CLASS lhc_travel IMPLEMENTATION.
   METHOD get_instance_features.
   ENDMETHOD.
 
+**************************************************************************
+* Instance-bound action acceptTravel
+**************************************************************************
   METHOD acceptTravel.
+    MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+         ENTITY travel
+            UPDATE FIELDS ( OverallStatus )
+               WITH VALUE #( FOR key IN keys ( %tky         = key-%tky
+                                               OverallStatus = travel_status-accepted ) ). " 'A' Accepted
+
+    " read changed data for result
+    READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY travel
+         ALL FIELDS WITH
+         CORRESPONDING #( keys )
+       RESULT DATA(travels).
+
+    result = VALUE #( FOR travel IN travels ( %tky = travel-%tky  %param = travel ) ).
   ENDMETHOD.
 
+**************************************************************************
+* static default factory action createTravel
+**************************************************************************
   METHOD createTravel.
+
+    IF keys IS NOT INITIAL.
+      SELECT * FROM /dmo/flight FOR ALL ENTRIES IN @keys WHERE carrier_id    = @keys-%param-carrier_id
+                                                         AND   connection_id = @keys-%param-connection_id
+                                                         AND   flight_date   = @keys-%param-flight_date
+                                                         INTO TABLE @DATA(flights).
+
+      "create travel instances with default bookings
+      MODIFY ENTITIES OF ZRAP110_R_TRAVELTP_075 IN LOCAL MODE
+        ENTITY Travel
+          CREATE
+            FIELDS ( CustomerID Description )
+              WITH VALUE #( FOR key IN keys ( %cid = key-%cid
+                                              %is_draft = key-%param-%is_draft
+                                              CustomerID = key-%param-customer_id
+                                              Description = 'Own Create Implementation' ) )
+          CREATE BY \_Booking
+            FIELDS ( CustomerID CarrierID ConnectionID FlightDate FlightPrice CurrencyCode )
+              WITH VALUE #( FOR key IN keys INDEX INTO i
+                          ( %cid_ref  = key-%cid
+                            %is_draft = key-%param-%is_draft
+                            %target   = VALUE #( ( %cid         = i
+                                                   %is_draft    = key-%param-%is_draft
+                                                   CustomerID   = key-%param-customer_id
+                                                   CarrierID    = key-%param-carrier_id
+                                                   ConnectionID = key-%param-connection_id
+                                                   FlightDate   = key-%param-flight_date
+                                                   FlightPrice  = VALUE #( flights[ carrier_id    = key-%param-carrier_id
+                                                                                    connection_id = key-%param-connection_id
+                                                                                    flight_date   = key-%param-flight_date ]-price OPTIONAL )
+                                                   CurrencyCode = VALUE #( flights[ carrier_id    = key-%param-carrier_id
+                                                                                    connection_id = key-%param-connection_id
+                                                                                    flight_date   = key-%param-flight_date ]-currency_code OPTIONAL )
+                          ) ) ) )
+      MAPPED mapped.
+    ENDIF.
+
   ENDMETHOD.
 
-  METHOD recalcTotalPrice.
-  ENDMETHOD.
+**************************************************************************
+* Internal instance-bound action calculateTotalPrice
+**************************************************************************
+  METHOD reCalctotalprice.
+     TYPES: BEGIN OF ty_amount_per_currencycode,
+              amount        TYPE /dmo/total_price,
+              currency_code TYPE /dmo/currency_code,
+            END OF ty_amount_per_currencycode.
 
+     DATA: amounts_per_currencycode TYPE STANDARD TABLE OF ty_amount_per_currencycode.
+
+     " Read all relevant travel instances.
+     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+          ENTITY Travel
+             FIELDS ( BookingFee CurrencyCode )
+             WITH CORRESPONDING #( keys )
+          RESULT DATA(travels).
+
+     DELETE travels WHERE CurrencyCode IS INITIAL.
+
+     " Read all associated bookings and add them to the total price.
+     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+       ENTITY Travel BY \_Booking
+         FIELDS ( FlightPrice CurrencyCode )
+       WITH CORRESPONDING #( travels )
+       LINK DATA(booking_links)
+       RESULT DATA(bookings).
+
+     LOOP AT travels ASSIGNING FIELD-SYMBOL(<travel>).
+       " Set the start for the calculation by adding the booking fee.
+       amounts_per_currencycode = VALUE #( ( amount        = <travel>-bookingfee
+                                             currency_code = <travel>-currencycode ) ).
+
+       LOOP AT booking_links INTO DATA(booking_link) USING KEY id WHERE source-%tky = <travel>-%tky.
+         " Short dump occurs if link table does not match read table, which must never happen
+         DATA(booking) = bookings[ KEY id  %tky = booking_link-target-%tky ].
+         COLLECT VALUE ty_amount_per_currencycode( amount        = booking-flightprice
+                                                   currency_code = booking-currencycode ) INTO amounts_per_currencycode.
+       ENDLOOP.
+
+       DELETE amounts_per_currencycode WHERE currency_code IS INITIAL.
+
+       CLEAR <travel>-TotalPrice.
+       LOOP AT amounts_per_currencycode INTO DATA(amount_per_currencycode).
+         " If needed do a Currency Conversion
+         IF amount_per_currencycode-currency_code = <travel>-CurrencyCode.
+           <travel>-TotalPrice += amount_per_currencycode-amount.
+         ELSE.
+           /dmo/cl_flight_amdp=>convert_currency(
+              EXPORTING
+                iv_amount                   =  amount_per_currencycode-amount
+                iv_currency_code_source     =  amount_per_currencycode-currency_code
+                iv_currency_code_target     =  <travel>-CurrencyCode
+                iv_exchange_rate_date       =  cl_abap_context_info=>get_system_date( )
+              IMPORTING
+                ev_amount                   = DATA(total_booking_price_per_curr)
+             ).
+           <travel>-TotalPrice += total_booking_price_per_curr.
+         ENDIF.
+       ENDLOOP.
+     ENDLOOP.
+
+     " write back the modified total_price of travels
+     MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+       ENTITY travel
+         UPDATE FIELDS ( TotalPrice )
+         WITH CORRESPONDING #( travels ).
+
+   ENDMETHOD.
+
+**************************************************************************
+* Instance-bound action rejectTravel
+**************************************************************************
   METHOD rejectTravel.
+    MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+         ENTITY travel
+            UPDATE FIELDS ( OverallStatus )
+               WITH VALUE #( FOR key IN keys ( %tky         = key-%tky
+                                               OverallStatus = travel_status-rejected ) ). " 'X' Rejected
+
+    " read changed data for result
+    READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY travel
+         ALL FIELDS WITH
+         CORRESPONDING #( keys )
+       RESULT DATA(travels).
+
+    result = VALUE #( FOR travel IN travels ( %tky = travel-%tky  %param = travel ) ).
   ENDMETHOD.
 
   METHOD calculateTotalPrice.
@@ -147,6 +288,9 @@ CLASS lhc_travel IMPLEMENTATION.
   METHOD setInitialTravelValues.
   ENDMETHOD.
 
+**************************************************************************
+* Validation for AgencyID
+**************************************************************************
   METHOD validateAgency.
     " Read relevant travel instance data
     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
@@ -189,7 +333,9 @@ CLASS lhc_travel IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
-
+**************************************************************************
+* Validation for CustomerID
+**************************************************************************
   METHOD validateCustomer.
     "read relevant travel instance data
     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
@@ -244,6 +390,9 @@ CLASS lhc_travel IMPLEMENTATION.
     ENDLOOP.
   ENDMETHOD.
 
+**************************************************************************
+* Validation for BeginDate and EndDate
+**************************************************************************
   METHOD validateDates.
     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
        ENTITY travel

@@ -11,7 +11,7 @@
     <LANGU>E</LANGU>
     <OBJECT>ZRAP110075</OBJECT>
     <TXT>RAP110 Travel ID group 075</TXT>
-    <TXTSHORT>RAP110 Travel ID</TXTSHORT>
+    <TXTSHORT>RAP110 Travel ID...</TXTSHORT>
    </TEXT>
   </asx:values>
  </asx:abap>
