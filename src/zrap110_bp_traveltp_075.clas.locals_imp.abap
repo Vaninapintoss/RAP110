@@ -282,10 +282,58 @@ CLASS lhc_travel IMPLEMENTATION.
     result = VALUE #( FOR travel IN travels ( %tky = travel-%tky  %param = travel ) ).
   ENDMETHOD.
 
+**************************************************************************
+* determination calculateTotalPrice
+**************************************************************************
   METHOD calculateTotalPrice.
+    MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY Travel
+        EXECUTE reCalcTotalPrice
+        FROM CORRESPONDING #( keys ).
+
   ENDMETHOD.
 
+**************************************************************************
+* determination setInitialTravelValues: BeginDate, EndDate
+**************************************************************************
   METHOD setInitialTravelValues.
+
+    READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+    ENTITY Travel
+      FIELDS ( BeginDate EndDate CurrencyCode OverallStatus )
+      WITH CORRESPONDING #( keys )
+    RESULT DATA(travels).
+
+    DATA: update TYPE TABLE FOR UPDATE zrap110_r_traveltp_075\\Travel.
+    update = CORRESPONDING #( travels ).
+    DELETE update WHERE BeginDate IS NOT INITIAL AND EndDate IS NOT INITIAL
+                    AND CurrencyCode IS NOT INITIAL AND OverallStatus IS NOT INITIAL.
+
+    LOOP AT update ASSIGNING FIELD-SYMBOL(<update>).
+      IF <update>-BeginDate IS INITIAL.
+        <update>-BeginDate     = cl_abap_context_info=>get_system_date( ) + 1.
+        <update>-%control-BeginDate = if_abap_behv=>mk-on.
+      ENDIF.
+      IF <update>-EndDate  IS INITIAL.
+        <update>-EndDate       = cl_abap_context_info=>get_system_date( ) + 15.
+        <update>-%control-EndDate = if_abap_behv=>mk-on.
+      ENDIF.
+      IF <update>-CurrencyCode IS INITIAL.
+        <update>-CurrencyCode  = 'EUR'.
+        <update>-%control-CurrencyCode = if_abap_behv=>mk-on.
+      ENDIF.
+      IF <update>-OverallStatus IS INITIAL.
+        <update>-OverallStatus = travel_status-open.
+        <update>-%control-OverallStatus = if_abap_behv=>mk-on.
+      ENDIF.
+    ENDLOOP.
+
+    IF update IS NOT INITIAL.
+      MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY Travel
+        UPDATE FROM update.
+    ENDIF.
+
   ENDMETHOD.
 
 **************************************************************************
