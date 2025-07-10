@@ -2,17 +2,17 @@ managed implementation in class zrap110_BP_TravelTP_075 unique;
 strict ( 2 );
 with draft;
 define behavior for ZRAP110_R_TRAVELTP_075 alias Travel
-persistent table ZRAP110_ATRAV075
-draft table ZRAP110_DTRAV075
+persistent table zrap110_atrav075
+draft table zrap110_dtrav075
 etag master LocalLastChangedAt
 lock master total etag LastChangedAt
-authorization master( global )
+authorization master ( global )
 late numbering
 
 {
   field ( readonly )
-   LocalLastChangedAt,
-   LastChangedAt;
+  LocalLastChangedAt,
+  LastChangedAt;
 
   field ( readonly ) TravelID;
   field ( readonly ) TotalPrice;
@@ -21,6 +21,14 @@ late numbering
   create;
   update ( features : instance );
   delete ( features : instance );
+
+  //side effects
+  side effects
+  {
+    field BookingFee affects field TotalPrice;
+    field CurrencyCode affects field TotalPrice;
+    determine action checkDates executed on field BeginDate, field EndDate affects messages;
+  }
 
   //action(s)
   action ( features : instance ) acceptTravel result [1] $self;
@@ -37,7 +45,7 @@ late numbering
   validation validateAgency on save { create; field AgencyID; }
   validation validateDates on save { create; field BeginDate, EndDate; }
 
-   //determination(s)
+  //determination(s)
   determination setInitialTravelValues on modify { create; }
   determination calculateTotalPrice on modify { create; field BookingFee, CurrencyCode; }
 
@@ -53,36 +61,36 @@ late numbering
     validation Booking~validateBookingStatus;
   }
 
-  mapping for ZRAP110_ATRAV075
-  {
-    TravelID = TRAVEL_ID;
-    AgencyID = AGENCY_ID;
-    CustomerID = CUSTOMER_ID;
-    BeginDate = BEGIN_DATE;
-    EndDate = END_DATE;
-    BookingFee = BOOKING_FEE;
-    TotalPrice = TOTAL_PRICE;
-    CurrencyCode = CURRENCY_CODE;
-    Description = DESCRIPTION;
-    Attachment = ATTACHMENT;
-    MimeType = MIME_TYPE;
-    FileName = FILE_NAME;
-    OverallStatus = OVERALL_STATUS;
-    CreatedBy = CREATED_BY;
-    CreatedAt = CREATED_AT;
-    LocalLastChangedBy = LOCAL_LAST_CHANGED_BY;
-    LocalLastChangedAt = LOCAL_LAST_CHANGED_AT;
-    LastChangedAt = LAST_CHANGED_AT;
-  }
+  mapping for zrap110_atrav075
+    {
+      TravelID           = TRAVEL_ID;
+      AgencyID           = AGENCY_ID;
+      CustomerID         = CUSTOMER_ID;
+      BeginDate          = BEGIN_DATE;
+      EndDate            = END_DATE;
+      BookingFee         = BOOKING_FEE;
+      TotalPrice         = TOTAL_PRICE;
+      CurrencyCode       = CURRENCY_CODE;
+      Description        = DESCRIPTION;
+      Attachment         = ATTACHMENT;
+      MimeType           = MIME_TYPE;
+      FileName           = FILE_NAME;
+      OverallStatus      = OVERALL_STATUS;
+      CreatedBy          = CREATED_BY;
+      CreatedAt          = CREATED_AT;
+      LocalLastChangedBy = LOCAL_LAST_CHANGED_BY;
+      LocalLastChangedAt = LOCAL_LAST_CHANGED_AT;
+      LastChangedAt      = LAST_CHANGED_AT;
+    }
 
   // create booking by association
-  association _Booking { create ( features:instance ); with draft; }
+  association _Booking { create ( features : instance ); with draft; }
 }
 
 define behavior for ZRAP110_R_BOOKINGTP_075 alias Booking
 implementation in class zrap110_BP_BookingTP_075 unique
-persistent table ZRAP110_ABOOK075
-draft table ZRAP110_DBOOK075
+persistent table zrap110_abook075
+draft table zrap110_dbook075
 etag master LocalLastChangedAt
 lock dependent by _Travel
 authorization dependent by _Travel
@@ -90,10 +98,10 @@ late numbering
 
 {
   field ( readonly )
-   TravelID,
-   LocalLastChangedAt;
+  TravelID,
+  LocalLastChangedAt;
 
- //static field control
+  //static field control
   field ( readonly ) BookingID;
   field ( mandatory ) CustomerID, CarrierID, Flightdate, BookingStatus;
 
@@ -107,23 +115,30 @@ late numbering
   determination setInitialBookingValues on modify { create; } //copy & paste
   determination calculateTotalPrice on modify { create; field FlightPrice, CurrencyCode; }  //**
 
+  //side effects for a target entity
+  side effects
+  {
+    field FlightPrice affects field _Travel.TotalPrice;
+    field CurrencyCode affects field _Travel.TotalPrice;
+  }
+
   //function(s)
   function getDaysToFlight result [1] ZRAP110_A_DaysToFlight_075;
 
-  mapping for ZRAP110_ABOOK075
-  {
-    TravelID = TRAVEL_ID;
-    BookingID = BOOKING_ID;
-    BookingDate = BOOKING_DATE;
-    CustomerID = CUSTOMER_ID;
-    CarrierID = CARRIER_ID;
-    ConnectionID = CONNECTION_ID;
-    FlightDate = FLIGHT_DATE;
-    FlightPrice = FLIGHT_PRICE;
-    CurrencyCode = CURRENCY_CODE;
-    BookingStatus = BOOKING_STATUS;
-    LocalLastChangedAt = LOCAL_LAST_CHANGED_AT;
-  }
+  mapping for zrap110_abook075
+    {
+      TravelID           = TRAVEL_ID;
+      BookingID          = BOOKING_ID;
+      BookingDate        = BOOKING_DATE;
+      CustomerID         = CUSTOMER_ID;
+      CarrierID          = CARRIER_ID;
+      ConnectionID       = CONNECTION_ID;
+      FlightDate         = FLIGHT_DATE;
+      FlightPrice        = FLIGHT_PRICE;
+      CurrencyCode       = CURRENCY_CODE;
+      BookingStatus      = BOOKING_STATUS;
+      LocalLastChangedAt = LOCAL_LAST_CHANGED_AT;
+    }
 
   association _Travel { with draft; }
 }
