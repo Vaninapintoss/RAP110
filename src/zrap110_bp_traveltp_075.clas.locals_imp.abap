@@ -5,6 +5,15 @@ CLASS lsc_zrap110_r_traveltp_075 DEFINITION INHERITING FROM cl_abap_behavior_sav
 
   PROTECTED SECTION.
 
+    CONSTANTS:
+      BEGIN OF travel_status,
+        open     TYPE c LENGTH 1 VALUE 'O', "Open
+        accepted TYPE c LENGTH 1 VALUE 'A', "Accepted
+        rejected TYPE c LENGTH 1 VALUE 'X', "Rejected
+      END OF travel_status.
+
+    METHODS save_modified REDEFINITION.
+
     METHODS adjust_numbers REDEFINITION.
 
 ENDCLASS.
@@ -68,6 +77,44 @@ CLASS lsc_zrap110_r_traveltp_075 IMPLEMENTATION.
         ENDLOOP.
       ENDLOOP.
     ENDIF.
+  ENDMETHOD.
+
+  METHOD save_modified.
+    "send notification for all accepted and rejected travel instances
+    IF update IS NOT INITIAL.
+
+      "raise event
+      RAISE ENTITY EVENT ZRAP110_R_TravelTP_075~travel_accepted
+       FROM VALUE #(
+         FOR travel IN update-travel
+         WHERE ( %control-OverallStatus EQ if_abap_behv=>mk-on AND
+                 OverallStatus          EQ travel_status-accepted )
+           "transferred information
+           ( %key           = travel-%key
+             travel_id      = travel-TravelID
+             agency_id      = travel-AgencyID
+             customer_id    = travel-CustomerID
+             overall_status = travel-OverallStatus
+             description    = travel-Description
+             total_price    = travel-TotalPrice
+             currency_code  = travel-CurrencyCode
+             begin_date     = travel-BeginDate
+             end_date       = travel-EndDate
+           )
+         ).
+
+      "raise event
+      RAISE ENTITY EVENT ZRAP110_R_TravelTP_075~travel_rejected
+       FROM VALUE #(
+         FOR travel IN update-travel
+         WHERE ( %control-OverallStatus EQ if_abap_behv=>mk-on AND
+                 OverallStatus          EQ travel_status-rejected )
+           "transferred information
+            ( %key = travel-%key )
+         ).
+
+    ENDIF.
+
   ENDMETHOD.
 
 ENDCLASS.
@@ -161,7 +208,7 @@ CLASS lhc_travel IMPLEMENTATION.
                                                          INTO TABLE @DATA(flights).
 
       "create travel instances with default bookings
-      MODIFY ENTITIES OF ZRAP110_R_TRAVELTP_075 IN LOCAL MODE
+      MODIFY ENTITIES OF zrap110_r_traveltp_075 IN LOCAL MODE
         ENTITY Travel
           CREATE
             FIELDS ( CustomerID Description )
@@ -196,71 +243,71 @@ CLASS lhc_travel IMPLEMENTATION.
 * Internal instance-bound action calculateTotalPrice
 **************************************************************************
   METHOD reCalctotalprice.
-     TYPES: BEGIN OF ty_amount_per_currencycode,
-              amount        TYPE /dmo/total_price,
-              currency_code TYPE /dmo/currency_code,
-            END OF ty_amount_per_currencycode.
+    TYPES: BEGIN OF ty_amount_per_currencycode,
+             amount        TYPE /dmo/total_price,
+             currency_code TYPE /dmo/currency_code,
+           END OF ty_amount_per_currencycode.
 
-     DATA: amounts_per_currencycode TYPE STANDARD TABLE OF ty_amount_per_currencycode.
+    DATA: amounts_per_currencycode TYPE STANDARD TABLE OF ty_amount_per_currencycode.
 
-     " Read all relevant travel instances.
-     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
-          ENTITY Travel
-             FIELDS ( BookingFee CurrencyCode )
-             WITH CORRESPONDING #( keys )
-          RESULT DATA(travels).
+    " Read all relevant travel instances.
+    READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+         ENTITY Travel
+            FIELDS ( BookingFee CurrencyCode )
+            WITH CORRESPONDING #( keys )
+         RESULT DATA(travels).
 
-     DELETE travels WHERE CurrencyCode IS INITIAL.
+    DELETE travels WHERE CurrencyCode IS INITIAL.
 
-     " Read all associated bookings and add them to the total price.
-     READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
-       ENTITY Travel BY \_Booking
-         FIELDS ( FlightPrice CurrencyCode )
-       WITH CORRESPONDING #( travels )
-       LINK DATA(booking_links)
-       RESULT DATA(bookings).
+    " Read all associated bookings and add them to the total price.
+    READ ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY Travel BY \_Booking
+        FIELDS ( FlightPrice CurrencyCode )
+      WITH CORRESPONDING #( travels )
+      LINK DATA(booking_links)
+      RESULT DATA(bookings).
 
-     LOOP AT travels ASSIGNING FIELD-SYMBOL(<travel>).
-       " Set the start for the calculation by adding the booking fee.
-       amounts_per_currencycode = VALUE #( ( amount        = <travel>-bookingfee
-                                             currency_code = <travel>-currencycode ) ).
+    LOOP AT travels ASSIGNING FIELD-SYMBOL(<travel>).
+      " Set the start for the calculation by adding the booking fee.
+      amounts_per_currencycode = VALUE #( ( amount        = <travel>-bookingfee
+                                            currency_code = <travel>-currencycode ) ).
 
-       LOOP AT booking_links INTO DATA(booking_link) USING KEY id WHERE source-%tky = <travel>-%tky.
-         " Short dump occurs if link table does not match read table, which must never happen
-         DATA(booking) = bookings[ KEY id  %tky = booking_link-target-%tky ].
-         COLLECT VALUE ty_amount_per_currencycode( amount        = booking-flightprice
-                                                   currency_code = booking-currencycode ) INTO amounts_per_currencycode.
-       ENDLOOP.
+      LOOP AT booking_links INTO DATA(booking_link) USING KEY id WHERE source-%tky = <travel>-%tky.
+        " Short dump occurs if link table does not match read table, which must never happen
+        DATA(booking) = bookings[ KEY id  %tky = booking_link-target-%tky ].
+        COLLECT VALUE ty_amount_per_currencycode( amount        = booking-flightprice
+                                                  currency_code = booking-currencycode ) INTO amounts_per_currencycode.
+      ENDLOOP.
 
-       DELETE amounts_per_currencycode WHERE currency_code IS INITIAL.
+      DELETE amounts_per_currencycode WHERE currency_code IS INITIAL.
 
-       CLEAR <travel>-TotalPrice.
-       LOOP AT amounts_per_currencycode INTO DATA(amount_per_currencycode).
-         " If needed do a Currency Conversion
-         IF amount_per_currencycode-currency_code = <travel>-CurrencyCode.
-           <travel>-TotalPrice += amount_per_currencycode-amount.
-         ELSE.
-           /dmo/cl_flight_amdp=>convert_currency(
-              EXPORTING
-                iv_amount                   =  amount_per_currencycode-amount
-                iv_currency_code_source     =  amount_per_currencycode-currency_code
-                iv_currency_code_target     =  <travel>-CurrencyCode
-                iv_exchange_rate_date       =  cl_abap_context_info=>get_system_date( )
-              IMPORTING
-                ev_amount                   = DATA(total_booking_price_per_curr)
-             ).
-           <travel>-TotalPrice += total_booking_price_per_curr.
-         ENDIF.
-       ENDLOOP.
-     ENDLOOP.
+      CLEAR <travel>-TotalPrice.
+      LOOP AT amounts_per_currencycode INTO DATA(amount_per_currencycode).
+        " If needed do a Currency Conversion
+        IF amount_per_currencycode-currency_code = <travel>-CurrencyCode.
+          <travel>-TotalPrice += amount_per_currencycode-amount.
+        ELSE.
+          /dmo/cl_flight_amdp=>convert_currency(
+             EXPORTING
+               iv_amount                   =  amount_per_currencycode-amount
+               iv_currency_code_source     =  amount_per_currencycode-currency_code
+               iv_currency_code_target     =  <travel>-CurrencyCode
+               iv_exchange_rate_date       =  cl_abap_context_info=>get_system_date( )
+             IMPORTING
+               ev_amount                   = DATA(total_booking_price_per_curr)
+            ).
+          <travel>-TotalPrice += total_booking_price_per_curr.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
 
-     " write back the modified total_price of travels
-     MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
-       ENTITY travel
-         UPDATE FIELDS ( TotalPrice )
-         WITH CORRESPONDING #( travels ).
+    " write back the modified total_price of travels
+    MODIFY ENTITIES OF ZRAP110_R_TravelTP_075 IN LOCAL MODE
+      ENTITY travel
+        UPDATE FIELDS ( TotalPrice )
+        WITH CORRESPONDING #( travels ).
 
-   ENDMETHOD.
+  ENDMETHOD.
 
 **************************************************************************
 * Instance-bound action rejectTravel
