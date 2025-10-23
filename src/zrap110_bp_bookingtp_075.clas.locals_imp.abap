@@ -43,6 +43,27 @@ CLASS lhc_booking IMPLEMENTATION.
          WITH CORRESPONDING #( keys )
        RESULT DATA(bookings).
 
+"suggest cleaner version of this loop
+
+" github copilot suggestion
+*    LOOP AT bookings ASSIGNING FIELD-SYMBOL(<booking>).
+*      c_booking_entity = CORRESPONDING #( <booking> ).
+*      "set relevant transfered data
+*      booking_result   = CORRESPONDING #( <booking> ).
+*      "calculate virtual elements
+*      booking_result-%param
+*        = CORRESPONDING #( zrap110_calc_book_elem_075=>calculate_days_to_flight( c_booking_entity )
+*                           MAPPING booking_status_indicator = BookingStatusIndicator
+*                                   days_to_flight_indicator = DaysToFlightIndicator
+*                                   initial_days_to_flight   = InitialDaysToFlight
+*                                   remaining_days_to_flight = RemainingDaysToFlight ).
+*      "append
+*      APPEND booking_result TO bookings_result.
+*    ENDLOOP.
+*
+*    result = bookings_result.
+
+" old code
     LOOP AT bookings ASSIGNING FIELD-SYMBOL(<booking>).
       c_booking_entity = CORRESPONDING #( <booking> ).
       "set relevant transfered data
